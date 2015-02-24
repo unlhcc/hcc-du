@@ -3,14 +3,22 @@
 
 # WP/Warning Percentages for blocks and files/inodes
 # users
-WP_UB = .65
-WP_UI = .25
+WP_UB = .75
+WP_UI = .75
 # groups
-WP_GB = .75
-WP_GI = .75
-# all the things (tm)
-WP_AB = .85
-WP_AI = .85
+WP_GB = .80
+WP_GI = .80
+# FS
+WP_FB = .85
+WP_FI = .85
+
+#Testing
+#WP_UB = .05
+#WP_UI = .05
+#WP_GB = .05
+#WP_GI = .05
+#WP_FB = .05
+#WP_FI = .05
 
 WARNING_MESSAGE    = \
 "**ATTENTION** Please clean what you can from /work **ATTENTION**"
@@ -157,6 +165,7 @@ def group_lquota():
     return eval(lgq)
     
 def group_quota_display(opts, gq):
+    """Display group usage, sorted by blocks or inodes"""
     if opts.group == "b":
         sort_idx = 4
     elif opts.group == "i":
@@ -328,15 +337,46 @@ def get_stats(rows, columns,
 
     return (pt[0], pt[1], htxt, hds, wtxt, wds)
 
-WARN_H = 0x01 # involves home file system
-WARN_W = 0x02 # involves work file system
+'''
+Warning
+|[Home | Work]
+||[User | Group | File system | Reserved]
+|||[Block | Inode | [1,2]]
+||||
+'''
+WHUB = 0x0001
+WHUI = 0x0002
+WHGB = 0x0004
+WHGI = 0x0008
+WHFB = 0x0010
+WHFI = 0x0020
+WHR1 = 0x0040
+WHR2 = 0x0080
 
-WARN_B = 0x04 # warn block usage
-WARN_I = 0x08 # warn inode usage
+WWUB = 0x0100
+WWUI = 0x0200
+WWGB = 0x0400
+WWGI = 0x0800
+WWFB = 0x1000
+WWFI = 0x2000
+WWR1 = 0x4000
+WWR2 = 0x8000
 
-WARN_U = 0x10 # warn for user  usage
-WARN_G = 0x20 # warn for group usage
-WARN_A = 0x40 # warn for all   usage
+'''
+Mask
+|[Home | Work]
+||[User | Group | File system | All]
+|||
+'''
+MHU  = 0x0003
+MHG  = 0x000c
+MHF  = 0x0030
+MHA  = 0x00ff
+
+MWU  = 0x0300
+MWG  = 0x0c00
+MWF  = 0x3000
+MWA  = 0xff00
 
 def qcheck(type, hds, wds):
     """Check the state of the calling users quota and return a number"""
@@ -344,31 +384,31 @@ def qcheck(type, hds, wds):
     # check the WP_ or "warning percentages"
     if type == USRQUOTA:
         if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_UB:
-            ret |= WARN_U | WARN_H | WARN_B
+            ret |= WHUB
         if hds.ih and 1.0 * hds.ic / hds.ih > WP_UI:
-            ret |= WARN_U | WARN_H | WARN_I
+            ret |= WHUI
         if wds.bh and 1.0 * wds.bc / (wds.bh * (2 ** 10)) > WP_UB:
-            ret |= WARN_U | WARN_W | WARN_B
+            ret |= WWUB
         if wds.ih and 1.0 * wds.ic / wds.ih > WP_UI:
-            ret |= WARN_U | WARN_W | WARN_I
+            ret |= WWUI
     elif type >= GRPQUOTA:
         if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_GB:
-            ret |= WARN_G | WARN_H | WARN_B
+            ret |= WHGB
         if hds.ih and 1.0 * hds.ic / hds.ih > WP_GI:
-            ret |= WARN_G | WARN_H | WARN_I
+            ret |= WHGI
         if wds.bh and 1.0 * wds.bc / (wds.bh * (2 ** 10)) > WP_GB:
-            ret |= WARN_G | WARN_W | WARN_B
+            ret |= WWGB
         if wds.ih and 1.0 * wds.ic / wds.ih > WP_GI:
-            ret |= WARN_G | WARN_W | WARN_I
+            ret |= WWGI
     else:
-        if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_AB:
-            ret |= WARN_A | WARN_H | WARN_B
-        if hds.ih and 1.0 * hds.ic / hds.ih > WP_AI:
-            ret |= WARN_A | WARN_H | WARN_I
-        if wds.bh and 1.0 * wds.bc / (wds.bh * (2 ** 10)) > WP_AB:
-            ret |= WARN_A | WARN_W | WARN_B
-        if wds.ih and 1.0 * wds.ic / wds.ih > WP_AI:
-            ret |= WARN_A | WARN_W | WARN_I
+        if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_FB:
+            ret |= WHFB
+        if hds.ih and 1.0 * hds.ic / hds.ih > WP_FI:
+            ret |= WHFI
+        if wds.bh and 1.0 * wds.bc / (wds.bh * (2 ** 10)) > WP_FB:
+            ret |= WWFB
+        if wds.ih and 1.0 * wds.ic / wds.ih > WP_FI:
+            ret |= WWFI
     return ret
 
 def display_usage(rows, columns,
@@ -416,19 +456,19 @@ def display_default(rows, columns,
     """display primary user, primary group and global filesystem stats"""
 
     uret, ut = display_usage(rows, columns,
-                         USRQUOTA, pwe, gre,
-                         hquota, hsvfs, hstat,
-                         wquota, wsvfs, wstat)
+                             USRQUOTA, pwe, gre,
+                             hquota, hsvfs, hstat,
+                             wquota, wsvfs, wstat)
     gret, gt = display_usage(rows, columns,
-                         GRPQUOTA, pwe, gre,
-                         hquota, hsvfs, hstat,
-                         wquota, wsvfs, wstat)
-    aret, at = display_usage(rows, columns,
-                         -1      , pwe, gre,
-                         hquota, hsvfs, hstat,
-                         wquota, wsvfs, wstat)
+                             GRPQUOTA, pwe, gre,
+                             hquota, hsvfs, hstat,
+                             wquota, wsvfs, wstat)
+    aret, ft = display_usage(rows, columns,
+                             -1      , pwe, gre,
+                             hquota, hsvfs, hstat,
+                             wquota, wsvfs, wstat)
 
-    return (uret | gret | aret, [ut, gt, at])
+    return (uret | gret | aret, [ut, gt, ft])
 
 def display_sgroups(rows, columns,
                     pwe, gre,
@@ -436,7 +476,7 @@ def display_sgroups(rows, columns,
                     wquota, wsvfs, wstat):
     """display supplementary group filesystem usage"""
     if len(hquota) > 2 or len(wquota) > 2:
-        print "\n"
+        print ""
         i = 2
         for g in wquota[2:]:
             gre = getgrgid(g.qc_id)
@@ -446,19 +486,56 @@ def display_sgroups(rows, columns,
                           wquota, wsvfs, wstat)
             i += 1
 
-def scold(reason):
-    if reason[0] & WARN_U:
-        if reason[0] & WARN_W:
-            if reason[0] & WARN_B:
-                print repr(reason[1])
-                print "you are using {0:.1f}% of your groups space on " \
-                      "/work".format( 100.0 * reason[1][0][1].bc /
-                                              reason[1][1][1].bc)
-    if reason[0] & WARN_G:
-        print "your group is doing something wrong, help them"
-    if reason[0] & WARN_A:
-        if reason[0] & (WARN_W | WARN_B) == (WARN_W | WARN_B):
+def work_scold(rows, columns, pwe, gre, reason):
+    """Make it clear that blocks or inodes should be freed on work.
+       Returns a number for whichever group quota is over, 0 for none,
+       1 for block, 2 for inode or 3 for both."""
+    rc = 0
+    if reason[0] & (MWU | MWG):
+        print "\nTwo quotas exist on /work, block (used space) and inode " \
+              "(number of files)"
+        if False: '''
+'''
+        print "  [quota available/maximum]: [block {0}GB/{1}GB] [inode {2}/{3}]" \
+              .format((reason[1][1][1].bh -
+                      (reason[1][1][1].bc / 2 ** 10)) / 2 ** 20,
+                      reason[1][1][1].bh / 2 ** 20,
+                      reason[1][1][1].ih -
+                      reason[1][1][1].ic,
+                      reason[1][1][1].ih)
+        print "  quota: block {0}GB\tinode {1}" \
+              .format(reason[1][1][1].bh / 2 ** 20,
+                      reason[1][1][1].ih)
+        print "  avail: block {0}GB\tinode {1}" \
+              .format((reason[1][1][1].bh -
+                      (reason[1][1][1].bc / 2 ** 10)) / 2 ** 20,
+                      reason[1][1][1].ih -
+                      reason[1][1][1].ic)
+        if reason[0] & MWG:
+            rc = ((reason[0] & MWG) >> 10)
+            quota = [ "", "block", "inode", "block and inode" ]
+            print "  Your group is approaching its {0} quota, please " \
+                  "compress,\n  delete or move files off the system." \
+                  .format(quota[((reason[0] & MWG) >> 10)])
+
+        if reason[0] & MWU:
+            if reason[0] & WWUB:
+                print "  You are consuming {0:.1f}% of your groups used " \
+                      "space.".format(100.0 *
+                                      reason[1][0][1].bc /
+                                      reason[1][1][1].bc)
+            if reason[0] & WWUI:
+                print "  You own {0} files, or {1:.1f}% of the files " \
+                      "created by your group.".format(reason[1][0][1].ic,
+                                                      100.0 *
+                                                      reason[1][0][1].ic /
+                                                      reason[1][1][1].ic)
+
+    if reason[0] & MWF:
+        if reason[0] & (WWFB):
             print color(WARNING_MESSAGE.center(columns), style = "blink+bold")
+
+    return rc
 
 def main_default(opts):
     """HCC Disk Usage default output"""
@@ -488,8 +565,6 @@ def main_default(opts):
                           pwe, gre,
                           hquota, hsvfs, hstat,
                           wquota, wsvfs, wstat)
-    if opts.login and ret[0]:
-        scold(ret)
 
     if opts.sup:
         display_sgroups(rows, columns,
@@ -497,7 +572,10 @@ def main_default(opts):
                         hquota, hsvfs, hstat,
                         wquota, wsvfs, wstat)
 
+    if opts.login and ret[0]:
+        return work_scold(rows, columns, pwe, gre, ret)
 
+    return 0
 
 if __name__ == "__main__":
     parser = OptionParser()
@@ -523,4 +601,4 @@ if __name__ == "__main__":
     if opts.group:
         main_group(opts)
     else:
-        main_default(opts)
+        sys.exit(main_default(opts))
