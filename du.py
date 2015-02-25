@@ -328,7 +328,7 @@ def get_stats(rows, columns,
     elif type > GRPQUOTA:
         pt = ("supplementary group", gre.gr_name)
     else:
-        pt = ("all HCC", "groups")
+        pt = ("entire", "system")
 
     htxt, hds = disk_stats(type, pt[0], pwe, gre,
                            hquota, hsvfs, hstat)
