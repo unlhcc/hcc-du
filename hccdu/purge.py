@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
 PURGE_PATH = "/lustre/purge/current"
@@ -30,7 +30,7 @@ def print_list(uid):
     subprocess.call("less -n {0}".format(list_file).split(" "))
     return 0
 
-if __name__ == "__main__":
+def main():
     usage = "usage: %prog [OPTION]"
     parser = OptionParser(usage = usage)
     parser.add_option("-l", "--list", action = "store_true", default = False,

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
 import collections
@@ -104,7 +104,7 @@ def rquota_find_home_mount():
             break
     return path
 
-if __name__ == "__main__":
+def main():
     ql = rquota_get(rquota_find_home_mount())
     m = [
             "user quota",

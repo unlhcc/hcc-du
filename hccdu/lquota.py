@@ -74,7 +74,7 @@ def lquota_get(lq_path):
 
     return ret_lq
 
-if __name__ == "__main__":
+def main():
     path = "/lustre"
     ql = lquota_get(path)
     m = [

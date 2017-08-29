@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
 # WP/Warning Percentages for blocks and files/inodes
@@ -33,9 +33,9 @@ import operator
 import subprocess
 from colors import color
 from os import getuid, stat, statvfs
-from rquota import USRQUOTA, GRPQUOTA, rquota_t, rquota_get, \
+from hccdu.rquota import USRQUOTA, GRPQUOTA, rquota_t, rquota_get, \
                    rquota_find_home_mount
-from lquota import if_quotactl, lquota_get
+from hccdu.lquota import if_quotactl, lquota_get
 from pwd import getpwuid
 from grp import getgrgid
 from optparse import OptionParser
@@ -411,7 +411,7 @@ def qcheck(type, hds, wds):
             ret |= WWFI
     return ret
 
-def display_usage(rows, columns,
+def display_usage(opts, rows, columns,
                   type, pwe, gre,
                   hquota, hsvfs, hstat,
                   wquota, wsvfs, wstat):
@@ -449,28 +449,28 @@ def display_usage(rows, columns,
 
     return qcheck(type, hds, wds), (hds, wds)
 
-def display_default(rows, columns,
+def display_default(opts, rows, columns,
                     pwe, gre,
                     hquota, hsvfs, hstat,
                     wquota, wsvfs, wstat):
     """display primary user, primary group and global filesystem stats"""
 
-    uret, ut = display_usage(rows, columns,
+    uret, ut = display_usage(opts, rows, columns,
                              USRQUOTA, pwe, gre,
                              hquota, hsvfs, hstat,
                              wquota, wsvfs, wstat)
-    gret, gt = display_usage(rows, columns,
+    gret, gt = display_usage(opts, rows, columns,
                              GRPQUOTA, pwe, gre,
                              hquota, hsvfs, hstat,
                              wquota, wsvfs, wstat)
-    aret, ft = display_usage(rows, columns,
+    aret, ft = display_usage(opts, rows, columns,
                              -1      , pwe, gre,
                              hquota, hsvfs, hstat,
                              wquota, wsvfs, wstat)
 
     return (uret | gret | aret, [ut, gt, ft])
 
-def display_sgroups(rows, columns,
+def display_sgroups(opts, rows, columns,
                     pwe, gre,
                     hquota, hsvfs, hstat,
                     wquota, wsvfs, wstat):
@@ -480,7 +480,7 @@ def display_sgroups(rows, columns,
         i = 2
         for g in wquota[2:]:
             gre = getgrgid(g.qc_id)
-            display_usage(rows, columns,
+            display_usage(opts, rows, columns,
                           i, pwe, gre,
                           hquota, hsvfs, hstat,
                           wquota, wsvfs, wstat)
@@ -561,13 +561,13 @@ def main_default(opts):
     wquota = lquota_get(LUSTRE_MOUNT_POINT)
 
 
-    ret = display_default(rows, columns,
+    ret = display_default(opts, rows, columns,
                           pwe, gre,
                           hquota, hsvfs, hstat,
                           wquota, wsvfs, wstat)
 
     if opts.sup:
-        display_sgroups(rows, columns,
+        display_sgroups(opts, rows, columns,
                         pwe, gre,
                         hquota, hsvfs, hstat,
                         wquota, wsvfs, wstat)
@@ -577,7 +577,8 @@ def main_default(opts):
 
     return 0
 
-if __name__ == "__main__":
+
+def main():
     parser = OptionParser()
     parser.add_option("-c", "--color", action = "store", 
                       metavar = "[a|n]", choices = ["a", "n"], default = "a",
@@ -602,3 +603,4 @@ if __name__ == "__main__":
         main_group(opts)
     else:
         sys.exit(main_default(opts))
+
