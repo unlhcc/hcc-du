@@ -494,15 +494,6 @@ def work_scold(rows, columns, pwe, gre, reason):
     if reason[0] & (MWU | MWG):
         print "\nTwo quotas exist on /work, block (used space) and inode " \
               "(number of files)"
-        if False: '''
-'''
-        print "  [quota available/maximum]: [block {0}GB/{1}GB] [inode {2}/{3}]" \
-              .format((reason[1][1][1].bh -
-                      (reason[1][1][1].bc / 2 ** 10)) / 2 ** 20,
-                      reason[1][1][1].bh / 2 ** 20,
-                      reason[1][1][1].ih -
-                      reason[1][1][1].ic,
-                      reason[1][1][1].ih)
         print "  quota: block {0}GB\tinode {1}" \
               .format(reason[1][1][1].bh / 2 ** 20,
                       reason[1][1][1].ih)
