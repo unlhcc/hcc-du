@@ -13,7 +13,7 @@ import collections
 import fcntl
 import struct
 
-LL_IOC_QUOTACTL = 0xc00866a2
+LL_IOC_QUOTACTL = 0xc0b066a2
 LUSTRE_Q_GETQUOTA = 0x800007
 
 USRQUOTA = 0
@@ -24,7 +24,7 @@ fmt_obd_dqinfo = "2L2I"
 fmt_obd_dqblk = "8L2I"
 fmt_obd_type = "16c"
 fmt_obd_uuid = "40c"
-fmt_if_quotactl = "4I" + fmt_obd_dqinfo + fmt_obd_dqblk + \
+fmt_if_quotactl = "6I" + fmt_obd_dqinfo + fmt_obd_dqblk + \
                          fmt_obd_type + fmt_obd_uuid
 
 if_quotactl = collections.namedtuple("if_quotactl",
@@ -41,12 +41,12 @@ if_quotactl = collections.namedtuple("if_quotactl",
 
 def lquota_if_quotactl(q):
     """defines and returns a "if_quotactl" named tuple from passed in tuple"""
-    return if_quotactl(q[1], q[2], q[8], q[9], q[10], q[11], q[12], q[13])
+    return if_quotactl(q[1], q[2], q[10], q[11], q[12], q[13], q[14], q[15])
 
 def lquota_ioctl(fd, lq_type, lq_id):
     """calls lustre ioctl LL_IOC_QUOTACTL"""
     if_quotactl = struct.pack(fmt_if_quotactl, LUSTRE_Q_GETQUOTA,
-                              lq_type, lq_id, 0,
+                              lq_type, lq_id, 0, 0, 0,
                               *(([0] * 4) + ([0] * 10) +
                                (['\0'] * 16) + (['\0'] * 40)))
     return fcntl.ioctl(fd, LL_IOC_QUOTACTL, if_quotactl)
