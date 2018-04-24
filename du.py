@@ -49,7 +49,7 @@ def get_bar(
         used = 0,
         total = 100,
         length = 30,
-        unit = 'GB',
+        order = 30,
     ):
     """Return a bar graphic indicating disk usage"""
 
@@ -99,12 +99,29 @@ def get_bar(
     # Space usage description
     # Example: 10% (10 / 100GB)
     if txt is None:
-        txt = "{percent:.1f}% ({used:.0f}/{total:.0f}{unit})".format(
-            percent = percent,
-            used = round(used),
-            total = round(total),
-            unit = unit,
-        )
+        if order == 30:
+            bi_units = ["GB", "TB", "PB", "EB", "ZB", "YB"]
+            ui = 0
+            ti = 0
+            while used >= 1024:
+                used = used / 1024
+                ui = ui + 1
+            while total >= 1024:
+                total = total / 1024
+                ti = ti + 1
+            txt = "{percent:.1f}% ({used:g}{uu}/{total:g}{tu})".format(
+                percent = percent,
+                used = round(used, 1),
+                uu = bi_units[ui],
+                total = round(total, 1),
+                tu = bi_units[ti],
+            )
+        else:
+            txt = "{percent:.1f}% ({used:g}/{total:g})".format(
+                percent = percent,
+                used = round(used, 1),
+                total = round(total, 1),
+            )
 
     # Pad description to bar length
     txt = txt.ljust(length)[:length]
