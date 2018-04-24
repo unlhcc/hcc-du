@@ -80,7 +80,7 @@ def call_beegfs_ctl(qtype, path, id):
                       else int(qd["files_hard"]),
                     0)
 
-def bquota_get(path):
+def bquota_get(path, query_supplementary = False):
     """Returns a list of bquota_t objects in order UID, GID, followed
        by supplemental GID(s) of the calling user."""
     # user quota list
@@ -92,9 +92,12 @@ def bquota_get(path):
     uid = os.getuid()
     # place primary GID at the start of the list
     gid = os.getgid()
-    grps = os.getgroups()
-    grps.sort()
-    grps.remove(gid)
+    if query_supplementary:
+        grps = os.getgroups()
+        grps.sort()
+        grps.remove(gid)
+    else:
+        grps = list()
     grps.insert(0, gid)
 
     # index 0 reserved for primary user quota
@@ -108,7 +111,7 @@ def bquota_get(path):
 
 if __name__ == "__main__":
     path = "/common"
-    ql = bquota_get(path)
+    ql = bquota_get(path, True)
     m = [
             "user quota",
             "group quota"

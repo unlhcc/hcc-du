@@ -30,7 +30,7 @@ rquota_t = collections.namedtuple("rquota_t",
                                      "dqb_itime"
                                   ])
 
-def rquota_get(path):
+def rquota_get(path, query_supplementary = False):
     """Calls out to the quota binary to collect user/group rpc.rquotad
        info on path.  Returns a list of rquota_t objects in order UID,
        GID, followed by supplemental GID(s) of the calling user."""
@@ -78,7 +78,7 @@ def rquota_get(path):
             elif lt[3] == "group":
                 if gid == qt.id:
                     uql[1] = qt
-                else:
+                elif query_supplementary:
                     uql.append(qt)
     return [] if ((uql[0] is None) or (uql[1] is None)) else uql
 
@@ -105,7 +105,7 @@ def rquota_find_home_mount():
     return path
 
 if __name__ == "__main__":
-    ql = rquota_get(rquota_find_home_mount())
+    ql = rquota_get(rquota_find_home_mount(), True)
     m = [
             "user quota",
             "group quota"

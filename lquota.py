@@ -51,7 +51,7 @@ def lquota_ioctl(fd, lq_type, lq_id):
                                (['\0'] * 16) + (['\0'] * 40)))
     return fcntl.ioctl(fd, LL_IOC_QUOTACTL, if_quotactl)
 
-def lquota_get(lq_path):
+def lquota_get(lq_path, query_supplementary = False):
     """returns Lustre quota information for the calling process UID/GID(s)"""
     ret_lq = []
     fd = os.open(lq_path, os.O_RDONLY | os.O_NONBLOCK | os.O_DIRECTORY)
@@ -61,9 +61,12 @@ def lquota_get(lq_path):
 
     # place primary GID at the start of the list
     gid = os.getgid()
-    grps = os.getgroups()
-    grps.sort()
-    grps.remove(gid)
+    if query_supplementary:
+        grps = os.getgroups()
+        grps.sort()
+        grps.remove(gid)
+    else:
+        grps = list()
     grps.insert(0, gid)
 
     for g in grps:
@@ -76,7 +79,7 @@ def lquota_get(lq_path):
 
 if __name__ == "__main__":
     path = "/lustre"
-    ql = lquota_get(path)
+    ql = lquota_get(path, True)
     m = [
             "user quota",
             "group quota",
