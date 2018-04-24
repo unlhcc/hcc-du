@@ -26,6 +26,8 @@ WARNING_MESSAGE    = \
 LUSTRE_MOUNT_POINT = "/lustre"
 GROUP_QUOTA_BINARY = "/util/opt/bin/hcc/lgq"
 
+BEEGFS_MOUNT_POINT = "/common"
+
 import collections
 import sys
 import math
@@ -36,6 +38,7 @@ from os import getuid, stat, statvfs
 from rquota import USRQUOTA, GRPQUOTA, rquota_t, rquota_get, \
                    rquota_find_home_mount
 from lquota import if_quotactl, lquota_get
+from bquota import bquota_t, bquota_get
 from pwd import getpwuid
 from grp import getgrgid
 from optparse import OptionParser
@@ -313,7 +316,8 @@ def disk_stats(type, ts, pwe, gre, quota, svfs, stat):
 def get_stats(rows, columns,
               type, pwe, gre,
               hquota, hsvfs, hstat,
-              wquota, wsvfs, wstat):
+              wquota, wsvfs, wstat,
+              cquota, csvfs, cstat):
     """return USRQUOTA, GRPQUOTA or "other/-1" stats for home and work"""
 
     # print tuple, set below
@@ -321,6 +325,7 @@ def get_stats(rows, columns,
     # text message if not "percent% (usage/sizeGB)"
     htxt = None
     wtxt = None
+    ctxt = None
 
     if type == USRQUOTA or type == GRPQUOTA:
         pt = ("user", pwe.pw_name) if type == USRQUOTA else \
@@ -334,51 +339,67 @@ def get_stats(rows, columns,
                            hquota, hsvfs, hstat)
     wtxt, wds = disk_stats(type, pt[0], pwe, gre,
                            wquota, wsvfs, wstat)
+    ctxt, cds = disk_stats(type, pt[0], pwe, gre,
+                           cquota, csvfs, cstat)
 
-    return (pt[0], pt[1], htxt, hds, wtxt, wds)
+    return (pt[0], pt[1], htxt, hds, wtxt, wds, ctxt, cds)
 
 '''
 Warning
-|[Home | Work]
+|[Home | Work | Common]
 ||[User | Group | File system | Reserved]
 |||[Block | Inode | [1,2]]
 ||||
 '''
-WHUB = 0x0001
-WHUI = 0x0002
-WHGB = 0x0004
-WHGI = 0x0008
-WHFB = 0x0010
-WHFI = 0x0020
-WHR1 = 0x0040
-WHR2 = 0x0080
+WHUB = 0x000001
+WHUI = 0x000002
+WHGB = 0x000004
+WHGI = 0x000008
+WHFB = 0x000010
+WHFI = 0x000020
+WHR1 = 0x000040
+WHR2 = 0x000080
 
-WWUB = 0x0100
-WWUI = 0x0200
-WWGB = 0x0400
-WWGI = 0x0800
-WWFB = 0x1000
-WWFI = 0x2000
-WWR1 = 0x4000
-WWR2 = 0x8000
+WWUB = 0x000100
+WWUI = 0x000200
+WWGB = 0x000400
+WWGI = 0x000800
+WWFB = 0x001000
+WWFI = 0x002000
+WWR1 = 0x004000
+WWR2 = 0x008000
+
+WCUB = 0x010000
+WCUI = 0x020000
+WCGB = 0x040000
+WCGI = 0x080000
+WCFB = 0x100000
+WCFI = 0x200000
+WCR1 = 0x400000
+WCR2 = 0x800000
 
 '''
 Mask
-|[Home | Work]
+|[Home | Work | Common]
 ||[User | Group | File system | All]
 |||
 '''
-MHU  = 0x0003
-MHG  = 0x000c
-MHF  = 0x0030
-MHA  = 0x00ff
+MHU  = 0x000003
+MHG  = 0x00000c
+MHF  = 0x000030
+MHA  = 0x0000ff
 
-MWU  = 0x0300
-MWG  = 0x0c00
-MWF  = 0x3000
-MWA  = 0xff00
+MWU  = 0x000300
+MWG  = 0x000c00
+MWF  = 0x003000
+MWA  = 0x00ff00
 
-def qcheck(type, hds, wds):
+MCU  = 0x030000
+MCG  = 0x0c0000
+MCF  = 0x300000
+MCA  = 0xff0000
+
+def qcheck(type, hds, wds, cds):
     """Check the state of the calling users quota and return a number"""
     ret = 0
     # check the WP_ or "warning percentages"
@@ -391,6 +412,10 @@ def qcheck(type, hds, wds):
             ret |= WWUB
         if wds.ih and 1.0 * wds.ic / wds.ih > WP_UI:
             ret |= WWUI
+        if cds.bh and 1.0 * cds.bc / (cds.bh * (2 ** 10)) > WP_UB:
+            ret |= WCUB
+        if cds.ih and 1.0 * cds.ic / cds.ih > WP_UI:
+            ret |= WCUI
     elif type >= GRPQUOTA:
         if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_GB:
             ret |= WHGB
@@ -400,6 +425,10 @@ def qcheck(type, hds, wds):
             ret |= WWGB
         if wds.ih and 1.0 * wds.ic / wds.ih > WP_GI:
             ret |= WWGI
+        if cds.bh and 1.0 * cds.bc / (cds.bh * (2 ** 10)) > WP_GB:
+            ret |= WCGB
+        if cds.ih and 1.0 * cds.ic / cds.ih > WP_GI:
+            ret |= WCGI
     else:
         if hds.bh and 1.0 * hds.bc / (hds.bh * (2 ** 10)) > WP_FB:
             ret |= WHFB
@@ -409,82 +438,125 @@ def qcheck(type, hds, wds):
             ret |= WWFB
         if wds.ih and 1.0 * wds.ic / wds.ih > WP_FI:
             ret |= WWFI
+        if cds.bh and 1.0 * cds.bc / (cds.bh * (2 ** 10)) > WP_FB:
+            ret |= WCFB
+        if cds.ih and 1.0 * cds.ic / cds.ih > WP_FI:
+            ret |= WCFI
     return ret
 
 def display_usage(rows, columns,
                   type, pwe, gre,
                   hquota, hsvfs, hstat,
-                  wquota, wsvfs, wstat):
+                  wquota, wsvfs, wstat,
+                  cquota, csvfs, cstat):
     """default display output"""
 
     # ts: type string
     # tn: type name
-    # [h|w]: home or work
-    # [h|w]ds: disk stats (txt, ds_t(bc, bh, ic, ih))
+    # [h|w|c]: home, work or common
+    # [h|w|c]ds: disk stats (txt, ds_t(bc, bh, ic, ih))
     # txt: text message to override default
     # bc: blocks current in bytes
     # bh: blocks hard limit in KB
     # ic: inodes/files current
     # ih: inodes/files hard limit
-    ts, tn, htxt, hds, wtxt, wds = \
+    ts, tn, htxt, hds, wtxt, wds, ctxt, cds = \
         get_stats(rows, columns,
                   type, pwe, gre,
                   hquota, hsvfs, hstat,
-                  wquota, wsvfs, wstat)
+                  wquota, wsvfs, wstat,
+                  cquota, csvfs, cstat)
 
     # convert to floats so get_bar can round()
     ht = (htxt, 1.0 * hds.bc / 2 ** 30, 1.0 * hds.bh / 2 ** 20)
     wt = (wtxt, 1.0 * wds.bc / 2 ** 30, 1.0 * wds.bh / 2 ** 20)
+    ct = (ctxt, 1.0 * cds.bc / 2 ** 30, 1.0 * cds.bh / 2 ** 20)
 
-    # Column widths for home and work (add 2 col margin on the right side)
-    p2cw = equal_split(columns - 2, 2)
-
-    # print usage line
-    pu = ""
-    pu += '  Home ' + get_bar(opts, *ht,
-                              length = p2cw.pop() - (len('Home') + 3))
-    pu += '  Work ' + get_bar(opts, *wt,
-                              length = p2cw.pop() - (len('Work') + 3))
-    print "Disk usage for {0} {1}:\n{2}".format(ts, tn, pu)
-
-    return qcheck(type, hds, wds), (hds, wds)
+    return qcheck(type, hds, wds, cds), (hds, wds, cds), (ts, tn), (ht, wt, ct)
 
 def display_default(rows, columns,
                     pwe, gre,
                     hquota, hsvfs, hstat,
-                    wquota, wsvfs, wstat):
+                    wquota, wsvfs, wstat,
+                    cquota, csvfs, cstat):
     """display primary user, primary group and global filesystem stats"""
 
-    uret, ut = display_usage(rows, columns,
-                             USRQUOTA, pwe, gre,
-                             hquota, hsvfs, hstat,
-                             wquota, wsvfs, wstat)
-    gret, gt = display_usage(rows, columns,
-                             GRPQUOTA, pwe, gre,
-                             hquota, hsvfs, hstat,
-                             wquota, wsvfs, wstat)
-    aret, ft = display_usage(rows, columns,
-                             -1      , pwe, gre,
-                             hquota, hsvfs, hstat,
-                             wquota, wsvfs, wstat)
+    uret, ut, upt, ubs, = display_usage(rows, columns,
+                                        USRQUOTA, pwe, gre,
+                                        hquota, hsvfs, hstat,
+                                        wquota, wsvfs, wstat,
+                                        cquota, csvfs, cstat)
+    gret, gt, gpt, gbs = display_usage(rows, columns,
+                                       GRPQUOTA, pwe, gre,
+                                       hquota, hsvfs, hstat,
+                                       wquota, wsvfs, wstat,
+                                       cquota, csvfs, cstat)
+    fret, ft, fpt, fbs = display_usage(rows, columns,
+                                       -1      , pwe, gre,
+                                       hquota, hsvfs, hstat,
+                                       wquota, wsvfs, wstat,
+                                       cquota, csvfs, cstat)
 
-    return (uret | gret | aret, [ut, gt, ft])
-
-def display_sgroups(rows, columns,
-                    pwe, gre,
-                    hquota, hsvfs, hstat,
-                    wquota, wsvfs, wstat):
-    """display supplementary group filesystem usage"""
-    if len(hquota) > 2 or len(wquota) > 2:
-        print ""
+    whom = list()
+    whom.append("{0}{1}".format(upt[0], upt[1]))
+    whom.append("{0}{1}".format(gpt[0], gpt[1]))
+    if opts.sup:
+        sup = list()
         i = 2
         for g in wquota[2:]:
             gre = getgrgid(g.qc_id)
-            display_usage(rows, columns,
-                          i, pwe, gre,
-                          hquota, hsvfs, hstat,
-                          wquota, wsvfs, wstat)
+            sret, st, spt, sbs = display_usage(rows, columns,
+                                               i, pwe, gre,
+                                               hquota, hsvfs, hstat,
+                                               wquota, wsvfs, wstat,
+                                               cquota, csvfs, cstat)
+            sup.append((sret, st, spt, sbs))
+            whom.append("{0}{1}".format(spt[0], spt[1]))
             i += 1
+
+    whom.append("{0}{1}".format(fpt[0], fpt[1]))
+
+    wm = len(max(whom, key=len))
+
+    # Column widths for home, work and common
+    p3cw = equal_split(columns - wm - 2, 3)
+
+    # print usage line
+    pu = " {0:^{width}.{width}} ".format("", width = wm)
+
+    n = [ "/home", "/work", "/common"]
+
+    for l in range(0, len(n)):
+        pu += '[{0: ^{width}.{width}}]'.format(n[l], width = p3cw[l] - 2)
+    print pu
+
+    pu = "{0:-<{width}.{width}}>".format(whom[0], width = wm + 1)
+    pu += get_bar(opts, *ubs[0], length = p3cw[0] )
+    pu += get_bar(opts, *ubs[1], length = p3cw[1] )
+    pu += get_bar(opts, *ubs[2], length = p3cw[2] )
+    print pu
+
+    pu = "{0:-<{width}.{width}}>".format(whom[1], width = wm + 1)
+    pu += get_bar(opts, *gbs[0], length = p3cw[0] )
+    pu += get_bar(opts, *gbs[1], length = p3cw[1] )
+    pu += get_bar(opts, *gbs[2], length = p3cw[2] )
+    print pu
+
+    if opts.sup:
+        for l in range(0, len(wquota[2:])):
+            pu = "{0:-<{width}.{width}}>".format(whom[2 + l], width = wm + 1)
+            pu += get_bar(opts, *sup[l][3][0], length = p3cw[0] )
+            pu += get_bar(opts, *sup[l][3][1], length = p3cw[1] )
+            pu += get_bar(opts, *sup[l][3][2], length = p3cw[2] )
+            print pu
+
+    pu = "{0:-<{width}.{width}}>".format(whom[-1], width = wm + 1)
+    pu += get_bar(opts, *fbs[0], length = p3cw[0] )
+    pu += get_bar(opts, *fbs[1], length = p3cw[1] )
+    pu += get_bar(opts, *fbs[2], length = p3cw[2] )
+    print pu
+
+    return (uret | gret | fret, [ut, gt, ft])
 
 def work_scold(rows, columns, pwe, gre, reason):
     """Make it clear that blocks or inodes should be freed on work.
@@ -543,25 +615,23 @@ def main_default(opts):
     # get statvfs and stat info on mount points
     hsvfs = statvfs(home_mount)
     wsvfs = statvfs(LUSTRE_MOUNT_POINT)
+    csvfs = statvfs(BEEGFS_MOUNT_POINT)
 
     hstat = stat(home_mount)
     wstat = stat(LUSTRE_MOUNT_POINT)
+    cstat = stat(BEEGFS_MOUNT_POINT)
 
     # get RPC/remote and lustre quota info
-    hquota = rquota_get(home_mount)
-    wquota = lquota_get(LUSTRE_MOUNT_POINT)
+    hquota = rquota_get(home_mount, opts.sup)
+    wquota = lquota_get(LUSTRE_MOUNT_POINT, opts.sup)
+    cquota = bquota_get(BEEGFS_MOUNT_POINT, opts.sup)
 
 
     ret = display_default(rows, columns,
                           pwe, gre,
                           hquota, hsvfs, hstat,
-                          wquota, wsvfs, wstat)
-
-    if opts.sup:
-        display_sgroups(rows, columns,
-                        pwe, gre,
-                        hquota, hsvfs, hstat,
-                        wquota, wsvfs, wstat)
+                          wquota, wsvfs, wstat,
+                          cquota, csvfs, cstat)
 
     if opts.login and ret[0]:
         return work_scold(rows, columns, pwe, gre, ret)
