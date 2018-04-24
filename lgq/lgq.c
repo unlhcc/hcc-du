@@ -27,17 +27,20 @@
 
 #define _GNU_SOURCE
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <asm/ioctl.h>
 
-#include <lustre/lustre_user.h>
+#define LUSTRE_UTILS
+#include <lustre_ioctl.h>
 
 #include "source_code.h"
 
@@ -114,7 +117,7 @@ lquota(char *lmnt,
 
     for (idx = 0; idx < gm->count; idx++)
     {
-        rc = ioctl(fd, LL_IOC_QUOTACTL, &gm->qctl[idx]);
+        rc = ioctl(fd, OBD_IOC_QUOTACTL, &gm->qctl[idx]);
         if (rc < 0)
             continue;
     }
