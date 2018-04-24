@@ -328,12 +328,12 @@ def get_stats(rows, columns,
     ctxt = None
 
     if type == USRQUOTA or type == GRPQUOTA:
-        pt = ("user", pwe.pw_name) if type == USRQUOTA else \
-             ("primary group", gre.gr_name)
+        pt = ("U:", pwe.pw_name) if type == USRQUOTA else \
+             ("G:", gre.gr_name)
     elif type > GRPQUOTA:
-        pt = ("supplementary group", gre.gr_name)
+        pt = ("S:", gre.gr_name)
     else:
-        pt = ("entire", "system")
+        pt = ("E:", "")
 
     htxt, hds = disk_stats(type, pt[0], pwe, gre,
                            hquota, hsvfs, hstat)
@@ -556,6 +556,11 @@ def display_default(rows, columns,
     pu += get_bar(opts, *fbs[2], length = p3cw[2] )
     print pu
 
+    if opts.verbose:
+        key = "key: (U)ser, (G)roup, {0}(E)ntire system" \
+              .format("(S)upplementary group, " if opts.sup else "");
+        print "{0:{width}.{width}}".format(key, width = columns)
+
     return (uret | gret | fret, [ut, gt, ft])
 
 def work_scold(rows, columns, pwe, gre, reason):
@@ -657,6 +662,8 @@ if __name__ == "__main__":
                       help = "utilized bar graph is reverse video")
     parser.add_option("-s", "--sup", action = "store_true", default = False,
                       help = "display supplementary group usage")
+    parser.add_option("-v", "--verbose", action = "store_true", default = False,
+                      help = "be more verbose, includes header key definitions")
     (opts, args) = parser.parse_args()
 
     if opts.group:
