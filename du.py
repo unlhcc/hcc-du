@@ -24,7 +24,7 @@ WARNING_MESSAGE    = \
 "**ATTENTION** Please clean what you can from /work **ATTENTION**"
 
 LUSTRE_MOUNT_POINT = "/lustre"
-GROUP_QUOTA_BINARY = "/util/opt/bin/hcc/lgq"
+GROUP_QUOTA_BINARY = "/util/opt/bin/hcc/du/lgq/lgq"
 
 BEEGFS_MOUNT_POINT = "/common"
 
